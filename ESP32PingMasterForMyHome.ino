@@ -54,7 +54,7 @@ const int   daylightOffset_sec = 0;
 
 unsigned long previousMillis = 0;
 const long buzzerDuration = 200;
-const long interval = 60000;
+const long interval = 300000;
 
 //unsigned long currentMillis = 0;
 //uint8_t blinkLedFlag = 0;
