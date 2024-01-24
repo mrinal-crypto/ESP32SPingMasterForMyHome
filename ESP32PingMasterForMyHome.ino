@@ -5,6 +5,10 @@
 #include <U8g2lib.h>
 #include <string.h>
 #include <FastLED.h>
+#include <mDash.h>
+
+#define MDASH_APP_NAME "ESPPingMasterHOME"
+#define DEVICE_PASSWORD "TEl8GH8EfcX6fDF00DV5cg"
 
 #define BUZ 12
 #define DATA_PIN 21
@@ -56,12 +60,8 @@ unsigned long previousMillis = 0;
 const long buzzerDuration = 200;
 const long interval = 300000;
 
-//unsigned long currentMillis = 0;
-//uint8_t blinkLedFlag = 0;
-
 uint8_t wifiRSSI = 0;
 uint8_t pingStatus = 0;
-//uint8_t wifiConnectStatus = 0;
 uint16_t pingTime = 0;
 String ssid = "";
 
@@ -101,7 +101,8 @@ void setup() {
   u8g2.begin();
   welcomeMsg();
   delay(2000);
-//  connectWiFi(0, 10);
+  //  connectWiFi(0, 10);
+  mDashBegin(DEVICE_PASSWORD);
   u8g2.clearBuffer();
 
   FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
@@ -130,7 +131,7 @@ void remoteHost(uint8_t rhx, uint8_t rhy) {
 
   u8g2.setFont(u8g2_font_helvR08_tr); //8px height
   u8g2.drawStr(rhx, rhy, "ping -t");
-  u8g2.drawStr(rhx + 37, rhy, remote_host);
+  u8g2.drawStr(rhx + 37, rhy, remote_host); //remote_ip, remote_host
   u8g2.sendBuffer();
 
 }
@@ -183,9 +184,7 @@ void wifiSignalQuality(uint8_t sqx, uint8_t sqy) {
   tostring(str, signalQuality[wifiRSSI]);
 
   strcat(str, str2);
-
   clearLCD(sqx, sqy - 10, 27, 10);
-
   u8g2.setFont(u8g2_font_helvR08_tr);
   u8g2.drawStr(sqx, sqy, str);
   u8g2.sendBuffer();
@@ -240,11 +239,11 @@ void wifiConnectStatusLed(uint8_t wifiConnectStatus) {
     leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 64, 0);
     FastLED.show();
   }
-//  if (wifiConnectStatus == 2) {
-//
-//    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 255, 255);
-//    FastLED.show();
-//  }
+  //  if (wifiConnectStatus == 2) {
+  //
+  //    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 255, 255);
+  //    FastLED.show();
+  //  }
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -329,18 +328,6 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
       %Z  Time zone name.
       %%  % character.
     */
-
-    //print like "const char*"
-    //Serial.println(timeStringBuff);
-    //Serial.println(wDayStringBuff);
-    //Serial.println(mDayStringBuff);
-    //Serial.println(mNameStringBuff);
-    //Serial.println(monthStringBuff);
-    //Serial.println(yearStringBuff);
-
-    //Optional: Construct String object
-    //String asString(timeStringBuff);
-
 
     u8g2.setFont(u8g2_font_timB18_tr);
     u8g2.drawStr(ltx, lty, timeStringBuff);
@@ -470,7 +457,7 @@ void pingTest() {
 
   iconUpDown(107, 55, 1);
 
-  if (Ping.ping(remote_host))
+  if (Ping.ping(remote_host)) //remote_ip, remote_host
   {
 
     pingTime = Ping.averageTime();
@@ -590,9 +577,6 @@ void loop1(void * parameter) {
 
 //////////////////////////////////////////////////////////////////
 void loop() {
-
-
-
 
   if (WiFi.status() == WL_CONNECTED)
   {
