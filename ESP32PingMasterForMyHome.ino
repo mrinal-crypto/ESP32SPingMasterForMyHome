@@ -6,11 +6,6 @@
 #include <string.h>
 #include <FastLED.h>
 
-//#include <mDash.h>
-
-//#define MDASH_APP_NAME "ESPPingMasterHOME"
-//#define DEVICE_PASSWORD "TEl8GH8EfcX6fDF00DV5cg"
-
 #define BUZ 12
 #define DATA_PIN 21
 #define NUM_LEDS 4
@@ -51,9 +46,8 @@ U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, 18, 23, 5, 22); //for full buffer mode
 
 //U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, 18, 23, 5, 22); //for page buffer mode
 
-const IPAddress remote_ip(8, 8, 8, 8);
-//const char* remote_host = "www.google.com"; //only for ping, not for print to display 
-const char* remote_host = "8.8.8.8"; //only for print to display, not for ping
+const IPAddress remote_ip(8, 8, 8, 8); //8.8.8.8
+const char* remote_host = "www.google.com";
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 19800;
 const int   daylightOffset_sec = 0;
@@ -103,8 +97,7 @@ void setup() {
   u8g2.begin();
   welcomeMsg();
   delay(2000);
-  //  connectWiFi(0, 10);
-  //  mDashBegin(DEVICE_PASSWORD);
+//  connectWiFi(0, 10);
   u8g2.clearBuffer();
 
   FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
@@ -459,7 +452,7 @@ void pingTest() {
 
   iconUpDown(107, 55, 1);
 
-  if (Ping.ping(remote_ip)) //remote_ip, remote_host
+  if (Ping.ping(remote_host)) //remote_ip, remote_host
   {
 
     pingTime = Ping.averageTime();
