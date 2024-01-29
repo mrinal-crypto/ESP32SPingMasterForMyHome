@@ -97,7 +97,7 @@ void setup() {
   u8g2.begin();
   welcomeMsg();
   delay(2000);
-//  connectWiFi(0, 10);
+  //  connectWiFi(0, 10);
   u8g2.clearBuffer();
 
   FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
@@ -507,6 +507,15 @@ void noInternetBeep(int netStatus) {
       digitalWrite(BUZ, HIGH);
       delay(buzzerDuration);
       digitalWrite(BUZ, LOW);
+
+      if (Ping.ping(remote_host)) //remote_ip, remote_host
+      {
+
+        pingTime = Ping.averageTime();
+        pingStatus = 1;
+//        iconUpDown(107, 55, 2);
+      }
+      
     }
   }
 }
