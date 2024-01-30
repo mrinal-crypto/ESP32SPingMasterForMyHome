@@ -19,8 +19,8 @@
 
 CRGB leds[NUM_LEDS];
 
-TaskHandle_t Task1;
-
+TaskHandle_t Task2;
+SemaphoreHandle_t variableMutex;
 
 
 void remoteHost();
@@ -59,6 +59,8 @@ const long interval = 300000;
 uint8_t wifiRSSI = 0;
 uint8_t pingStatus = 0;
 uint16_t pingTime = 0;
+volatile uint8_t sharedVarForStatus = 0;
+volatile uint16_t sharedVarForTime = 0;
 String ssid = "";
 
 
@@ -106,14 +108,14 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-
+  variableMutex = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(
-    loop1,
-    "Task1",
+    loop2,
+    "Task2",
     100000,
     NULL,
     1,
-    &Task1,
+    &Task2,
     1);
   delay(500);
 }
@@ -452,23 +454,39 @@ void pingTest() {
 
   iconUpDown(107, 55, 1);
 
-  if (Ping.ping(remote_host)) //remote_ip, remote_host
-  {
+  if (Ping.ping(remote_host)) { //remote_ip, remote_host
 
-    pingTime = Ping.averageTime();
-    pingStatus = 1;
+
+    if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+      sharedVarForTime = Ping.averageTime();
+      sharedVarForStatus = 1;
+      xSemaphoreGive(variableMutex);
+    }
+    //    pingTime = Ping.averageTime();
+    //    pingStatus = 1;
 
     iconUpDown(107, 55, 2);
   }
-  else
-  {
-    pingStatus = 2;
+  else {
+    if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+      sharedVarForStatus = 2;
+      xSemaphoreGive(variableMutex);
+    }
+    //    pingStatus = 2;
     iconUpDown(107, 55, 2);
   }
 
   delay(3000);
 }
 
+//////////////////////////////////////////////////////////////
+void updatePingValue() {
+  if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+    pingTime = sharedVarForTime;
+    pingStatus = sharedVarForStatus;
+    xSemaphoreGive(variableMutex);
+  }
+}
 ////////////////////////////////////////////////////////////
 
 void welcomeMsg() {
@@ -510,12 +528,10 @@ void noInternetBeep(int netStatus) {
 
       if (Ping.ping(remote_host)) //remote_ip, remote_host
       {
-
         pingTime = Ping.averageTime();
         pingStatus = 1;
-//        iconUpDown(107, 55, 2);
       }
-      
+
     }
   }
 }
@@ -564,10 +580,9 @@ void loading()
 
 ///////////////////////////////////////////////////////////////
 
-void loop1(void * parameter) {
-  while (1) {
-    if (WiFi.status() == WL_CONNECTED)
-    {
+void loop2(void * parameter) {
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED) {
       pingTest();
     }
 
@@ -575,6 +590,8 @@ void loop1(void * parameter) {
       loading();
       FastLED.show();
     }
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 
 }
@@ -582,20 +599,27 @@ void loop1(void * parameter) {
 //////////////////////////////////////////////////////////////////
 void loop() {
 
-  if (WiFi.status() == WL_CONNECTED)
-  {
+  if (WiFi.status() == WL_CONNECTED) {
     wifiConnectStatusLed(1);
+    updatePingValue();
+    printLocalTime(0, 18);
+    remoteHost(0, 29);
     printSSID(0, 53);
     wifiSignalQuality(100, 53);
     ipCheck(0, 63);
-    printLocalTime(0, 18);
-    remoteHost(0, 29);
     internetStatus(0, 42, pingStatus);
     noInternetBeep(pingStatus);
 
+    //    wifiConnectStatusLed(1);
+    //    printSSID(0, 53);
+    //    wifiSignalQuality(100, 53);
+    //    ipCheck(0, 63);
+    //    printLocalTime(0, 18);
+    //    remoteHost(0, 29);
+    //    internetStatus(0, 42, pingStatus);
+    //    noInternetBeep(pingStatus);
   }
-  else
-  {
+  else {
     wifiConnectStatusLed(2);
     connectWiFi(0, 10);
     clearLCD(0, 0, 128, 64);
