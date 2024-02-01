@@ -31,6 +31,7 @@ void connectWiFi();
 void wifiConnectStatusLed();
 void printLocalTime();
 void printSSID();
+void updatePingValue();
 void internetStatus();
 void noInternetBeep();
 void iconUpDown();
@@ -227,7 +228,12 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
 }
-
+//////////////////////////////////////////////////////////////////
+void reconnectWiFi() {
+  WiFiManager wm;
+  wm.autoConnect("ESP PING-MASTER");
+  delay(100);
+}
 ////////////////////////////////////////////////////////////////////
 
 void wifiConnectStatusLed(uint8_t wifiConnectStatus) {
@@ -456,14 +462,11 @@ void pingTest() {
 
   if (Ping.ping(remote_host)) { //remote_ip, remote_host
 
-
     if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
       sharedVarForTime = Ping.averageTime();
       sharedVarForStatus = 1;
       xSemaphoreGive(variableMutex);
     }
-    //    pingTime = Ping.averageTime();
-    //    pingStatus = 1;
 
     iconUpDown(107, 55, 2);
   }
@@ -472,7 +475,6 @@ void pingTest() {
       sharedVarForStatus = 2;
       xSemaphoreGive(variableMutex);
     }
-    //    pingStatus = 2;
     iconUpDown(107, 55, 2);
   }
 
@@ -526,6 +528,7 @@ void noInternetBeep(int netStatus) {
       delay(buzzerDuration);
       digitalWrite(BUZ, LOW);
 
+      reconnectWiFi();
       if (Ping.ping(remote_host)) //remote_ip, remote_host
       {
         pingTime = Ping.averageTime();
