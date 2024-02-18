@@ -2,15 +2,17 @@
 #include <ESP32Ping.h>
 #include <WiFiManager.h>
 #include "time.h"
+#include "Ticker.h"
 #include <U8g2lib.h>
 #include <string.h>
 #include <FastLED.h>
 
 #define BUZ 12
 #define DATA_PIN 21
+#define ADJUST_BRIGHTNESS 14
 #define NUM_LEDS 4
 #define CHIPSET WS2812
-#define BRIGHTNESS 25
+#define BRIGHTNESS 35
 #define COLOR_ORDER GRB
 #define WIFI_CONNECT_STATUS_LED 0
 #define UPLOAD_DOWNLOAD_STATUS_LED 1
@@ -21,8 +23,9 @@ CRGB leds[NUM_LEDS];
 
 TaskHandle_t Task2;
 SemaphoreHandle_t variableMutex;
+Ticker nointernetTimer;
 
-
+void adjustBrightness ();
 void remoteHost();
 void ipCheck();
 void tostring();
@@ -31,7 +34,6 @@ void connectWiFi();
 void wifiConnectStatusLed();
 void printLocalTime();
 void printSSID();
-void updatePingValue();
 void internetStatus();
 void noInternetBeep();
 void iconUpDown();
@@ -41,21 +43,20 @@ void welcomeMsg();
 void clearLCD();
 void loading();
 
-
-
 U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, 18, 23, 5, 22); //for full buffer mode
 
-//U8G2_ST7920_128X64_1_SW_SPI u8g2(U8G2_R0, 18, 23, 5, 22); //for page buffer mode
+const IPAddress remote_ip(8, 8, 8, 8);
+//const char* remote_host = "www.google.com";
+const char* remote_host = "8.8.8.8";
 
-const IPAddress remote_ip(8, 8, 8, 8); //8.8.8.8
-const char* remote_host = "www.google.com";
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 19800;
 const int   daylightOffset_sec = 0;
 
+unsigned long countSec = 0; //
 unsigned long previousMillis = 0;
 const long buzzerDuration = 200;
-const long interval = 300000;
+const long interval = 540000; //9mins, in seconds
 
 uint8_t wifiRSSI = 0;
 uint8_t pingStatus = 0;
@@ -63,7 +64,6 @@ uint16_t pingTime = 0;
 volatile uint8_t sharedVarForStatus = 0;
 volatile uint16_t sharedVarForTime = 0;
 String ssid = "";
-
 
 static unsigned char upload_logo_bits[] = {
   0x04,
@@ -86,7 +86,6 @@ static unsigned char download_logo_bits[] = {
   0x04
 };
 
-
 int signalQuality[] = {99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
                        99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 98, 98, 98, 97, 97, 96, 96, 95, 95, 94, 93, 93, 92,
                        91, 90, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 76, 75, 74, 73, 71, 70, 69, 67, 66, 64,
@@ -97,19 +96,23 @@ int signalQuality[] = {99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
 void setup() {
   Serial.begin(115200);
   pinMode(BUZ, OUTPUT);
+  pinMode(ADJUST_BRIGHTNESS, INPUT);
   u8g2.begin();
+  nointernetTimer.attach(1, timerOn);
   welcomeMsg();
-  delay(2000);
+  delay(3000);
   //  connectWiFi(0, 10);
   u8g2.clearBuffer();
 
   FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
+//  adjustBrightness ();
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.clear();
   FastLED.show();
 
   variableMutex = xSemaphoreCreateMutex();
+
   xTaskCreatePinnedToCore(
     loop2,
     "Task2",
@@ -121,15 +124,34 @@ void setup() {
   delay(500);
 }
 
+///////////////////////////////////////////////////////////////
+void timerOn() {
+  if (pingStatus == 2) {
+    countSec++;
+  }
+  else {
+    countSec = 0;
+  }
+}
+////////////////////////////////////////////////////////////////
+
+void adjustBrightness () {
+  int sensorValue = analogRead(ADJUST_BRIGHTNESS);
+
+  int mappedValue = map(sensorValue, 0, 4095, 10, 255);
+  FastLED.setBrightness(mappedValue);
+//  Serial.println(mappedValue);
+}
+
 ///////////////////////////////////////////////////////////////////
 
 void remoteHost(uint8_t rhx, uint8_t rhy) {
 
   clearLCD(rhx, rhy - 10, 128, 10);
 
-  u8g2.setFont(u8g2_font_helvR08_tr); //8px height
+  u8g2.setFont(u8g2_font_helvR08_tr);
   u8g2.drawStr(rhx, rhy, "ping -t");
-  u8g2.drawStr(rhx + 37, rhy, remote_host); //remote_ip, remote_host
+  u8g2.drawStr(rhx + 37, rhy, remote_host);
   u8g2.sendBuffer();
 
 }
@@ -182,7 +204,9 @@ void wifiSignalQuality(uint8_t sqx, uint8_t sqy) {
   tostring(str, signalQuality[wifiRSSI]);
 
   strcat(str, str2);
+
   clearLCD(sqx, sqy - 10, 27, 10);
+
   u8g2.setFont(u8g2_font_helvR08_tr);
   u8g2.drawStr(sqx, sqy, str);
   u8g2.sendBuffer();
@@ -204,12 +228,12 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
   bool success = false;
   while (!success) {
     wm.setConfigPortalTimeout(60);
-    success = wm.autoConnect("ESP PING-MASTER");
+    success = wm.autoConnect("SantoshiMaa.CN");
     if (!success) {
 
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_helvR08_tr);
-      u8g2.drawStr(cwx, cwy + 12, "AP - ESP PING-MASTER");
+      u8g2.drawStr(cwx, cwy + 12, "SantoshiMaa.CN");
       u8g2.drawStr(cwx, cwy + 24, "Setup IP - 192.168.4.1");
       u8g2.drawStr(cwx, cwy + 36, "Conection Failed!");
       u8g2.sendBuffer();
@@ -228,12 +252,7 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
 }
-//////////////////////////////////////////////////////////////////
-void reconnectWiFi() {
-  WiFiManager wm;
-  wm.autoConnect("ESP PING-MASTER");
-  delay(100);
-}
+
 ////////////////////////////////////////////////////////////////////
 
 void wifiConnectStatusLed(uint8_t wifiConnectStatus) {
@@ -265,7 +284,6 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
     u8g2.setFont(u8g2_font_unifont_tr);
     u8g2.drawStr(ltx, lty, "Time Failed!");
     u8g2.sendBuffer();
-
   }
 
   if (getLocalTime(&timeinfo)) {
@@ -342,7 +360,6 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
     u8g2.drawStr(ltx + 94, lty, monthStringBuff);
     u8g2.drawStr(ltx + 110, lty, yearStringBuff);
 
-
     u8g2.drawStr(ltx + 59, lty - 9, secStringBuff);
     u8g2.drawStr(ltx + 78, lty - 9, wDayStringBuff);
     u8g2.drawStr(ltx + 100, lty - 9, mNameStringBuff);
@@ -406,11 +423,9 @@ void internetStatus(uint8_t iSx, uint8_t iSy, uint8_t statusValue) {
     u8g2.setFont(u8g2_font_t0_11b_tr);
     u8g2.drawStr(iSx, iSy, avg_time_str);
 
-    clearLCD(iSx + 82, iSy - 9, 36, 9);
+    clearLCD(iSx + 82, iSy - 9, 45, 9);
     u8g2.drawStr(iSx + 82, iSy, "Online");
-
     u8g2.sendBuffer();
-
   }
   if (statusValue == 2)
   {
@@ -419,7 +434,6 @@ void internetStatus(uint8_t iSx, uint8_t iSy, uint8_t statusValue) {
     clearLCD(iSx, iSy - 9, 128, 9);
     u8g2.setFont(u8g2_font_t0_11b_tr);
     u8g2.drawStr(iSx, iSy, "No internet!");
-
   }
 }
 
@@ -460,7 +474,7 @@ void pingTest() {
 
   iconUpDown(107, 55, 1);
 
-  if (Ping.ping(remote_host)) { //remote_ip, remote_host
+  if (Ping.ping(remote_ip)) { //remote_ip, remote_host
 
     if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
       sharedVarForTime = Ping.averageTime();
@@ -481,7 +495,7 @@ void pingTest() {
   delay(3000);
 }
 
-//////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////
 void updatePingValue() {
   if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
     pingTime = sharedVarForTime;
@@ -489,15 +503,17 @@ void updatePingValue() {
     xSemaphoreGive(variableMutex);
   }
 }
+
 ////////////////////////////////////////////////////////////
 
 void welcomeMsg() {
 
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_halftone_tr);
-  u8g2.drawStr(7, 25, "ESP PING MASTER");
-  u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(45, 60, "...by mrinal");
+  u8g2.setFont(u8g2_font_luBIS18_tr);
+  u8g2.drawStr(2, 22, "ESP PING");
+  u8g2.drawStr(7, 42, "MASTER");
+  u8g2.setFont(u8g2_font_t0_11_tr);
+  u8g2.drawStr(2, 60, "developed by M.Maity");
 
   u8g2.sendBuffer();
   u8g2.clearBuffer();
@@ -516,6 +532,7 @@ void clearLCD(const long x, uint8_t y, uint8_t wid, uint8_t hig) {
 //////////////////////////////////////////////////////////////
 
 void noInternetBeep(int netStatus) {
+
   if (netStatus == 2) {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
@@ -528,20 +545,54 @@ void noInternetBeep(int netStatus) {
       delay(buzzerDuration);
       digitalWrite(BUZ, LOW);
 
-      reconnectWiFi();
-      if (Ping.ping(remote_host)) //remote_ip, remote_host
+      if (Ping.ping(remote_ip)) //remote_ip, remote_host
       {
         pingTime = Ping.averageTime();
         pingStatus = 1;
       }
-
     }
   }
 }
 
 /////////////////////////////////////////////////////////////
-void loading()
-{
+void printTimer(int netStatus, uint8_t ptx, uint8_t pty) {
+
+  String elapsedTime = "";
+
+  if (netStatus == 2) {
+    unsigned int countMin = countSec / 60;
+    unsigned int countHour = countMin / 60;
+    unsigned int countDay = countHour / 24;
+
+    if (countHour > 24) {
+      clearLCD(ptx, pty - 9, 45, 9);
+      u8g2.setFont(u8g2_font_6x10_tr);
+      elapsedTime += String(countDay) + "d " + String(countHour % 24) + "h";
+      u8g2.drawStr(ptx, pty, elapsedTime.c_str());
+    }
+    else if (countMin > 60) {
+      clearLCD(ptx, pty - 9, 45, 9);
+      u8g2.setFont(u8g2_font_6x10_tr);
+      elapsedTime += String(countHour) + "h " + String(countMin % 60) + "m";
+      u8g2.drawStr(ptx, pty, elapsedTime.c_str());
+    }
+    else if (countSec > 60) {
+      clearLCD(ptx, pty - 9, 45, 9);
+      u8g2.setFont(u8g2_font_6x10_tr);
+      elapsedTime += String(countMin) + "m " + String(countSec % 60) + "s";
+      u8g2.drawStr(ptx, pty, elapsedTime.c_str());
+    }
+    else {
+      clearLCD(ptx, pty - 9, 45, 9);
+      u8g2.setFont(u8g2_font_6x10_tr);
+      elapsedTime += String(countSec) + "s";
+      u8g2.drawStr(ptx, pty, elapsedTime.c_str());
+    }
+  }
+}
+/////////////////////////////////////////////////////////////
+void loading() {
+  
   static uint16_t sPseudotime = 0;
   static uint16_t sLastMillis = 0;
   static uint16_t sHue16 = 0;
@@ -612,15 +663,7 @@ void loop() {
     ipCheck(0, 63);
     internetStatus(0, 42, pingStatus);
     noInternetBeep(pingStatus);
-
-    //    wifiConnectStatusLed(1);
-    //    printSSID(0, 53);
-    //    wifiSignalQuality(100, 53);
-    //    ipCheck(0, 63);
-    //    printLocalTime(0, 18);
-    //    remoteHost(0, 29);
-    //    internetStatus(0, 42, pingStatus);
-    //    noInternetBeep(pingStatus);
+    printTimer(pingStatus, 82, 42);
   }
   else {
     wifiConnectStatusLed(2);
