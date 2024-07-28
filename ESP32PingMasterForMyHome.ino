@@ -106,7 +106,7 @@ void setup() {
 
   FastLED.addLeds<CHIPSET, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 500);
-//  adjustBrightness ();
+  //  adjustBrightness ();
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.clear();
   FastLED.show();
@@ -140,20 +140,23 @@ void adjustBrightness () {
 
   int mappedValue = map(sensorValue, 0, 4095, 10, 255);
   FastLED.setBrightness(mappedValue);
-//  Serial.println(mappedValue);
+  //  Serial.println(mappedValue);
 }
 
 ///////////////////////////////////////////////////////////////////
 
 void remoteHost(uint8_t rhx, uint8_t rhy) {
 
+  String host = "ping -t " + String(remote_host) + " <Google>";
   clearLCD(rhx, rhy - 10, 128, 10);
 
   u8g2.setFont(u8g2_font_helvR08_tr);
-  u8g2.drawStr(rhx, rhy, "ping -t");
-  u8g2.drawStr(rhx + 37, rhy, remote_host);
-  u8g2.sendBuffer();
+  u8g2.drawStr(rhx, rhy, host.c_str());
 
+  //  u8g2.drawStr(rhx, rhy, "ping -t");
+  //  u8g2.drawStr(rhx + 37, rhy, remote_host);
+
+  u8g2.sendBuffer();
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -228,12 +231,12 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
   bool success = false;
   while (!success) {
     wm.setConfigPortalTimeout(60);
-    success = wm.autoConnect("SantoshiMaa.CN");
+    success = wm.autoConnect("PING MASTER");
     if (!success) {
 
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_helvR08_tr);
-      u8g2.drawStr(cwx, cwy + 12, "SantoshiMaa.CN");
+      u8g2.drawStr(cwx, cwy + 12, "PING MASTER");
       u8g2.drawStr(cwx, cwy + 24, "Setup IP - 192.168.4.1");
       u8g2.drawStr(cwx, cwy + 36, "Conection Failed!");
       u8g2.sendBuffer();
@@ -592,7 +595,7 @@ void printTimer(int netStatus, uint8_t ptx, uint8_t pty) {
 }
 /////////////////////////////////////////////////////////////
 void loading() {
-  
+
   static uint16_t sPseudotime = 0;
   static uint16_t sLastMillis = 0;
   static uint16_t sHue16 = 0;
