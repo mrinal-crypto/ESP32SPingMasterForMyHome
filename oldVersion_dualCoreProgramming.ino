@@ -14,11 +14,10 @@
 #define CHIPSET WS2812
 #define BRIGHTNESS 35
 #define COLOR_ORDER GRB
-
 #define WIFI_CONNECT_STATUS_LED 0
-#define TIME_STATUS_LED 1
+#define UPLOAD_DOWNLOAD_STATUS_LED 1
 #define INTERNET_STATUS_LED 2
-#define UPLOAD_DOWNLOAD_STATUS_LED 3
+#define TIME_STATUS_LED 3
 
 CRGB leds[NUM_LEDS];
 
@@ -112,6 +111,16 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
+  variableMutex = xSemaphoreCreateMutex();
+
+  xTaskCreatePinnedToCore(
+    loop2,
+    "Task2",
+    100000,
+    NULL,
+    1,
+    &Task2,
+    1);
   delay(500);
 }
 
@@ -156,7 +165,7 @@ void ipCheck(uint8_t ipx, uint8_t ipy) {
 
   String rawIP = WiFi.localIP().toString(); //toString () used for convert char to string
 
-  String IPAdd = "IP-" + rawIP;
+  String IPAdd = "IP - " + rawIP;
 
   clearLCD(ipx, ipy - 10, 98, 10);
 
@@ -252,16 +261,14 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
 void wifiConnectStatusLed(uint8_t wifiConnectStatus) {
 
   if (wifiConnectStatus == 1) {
-    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 255, 255);
+    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 64, 0);
     FastLED.show();
   }
-  if (wifiConnectStatus == 2) {
-    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 0, 0);
-    leds[UPLOAD_DOWNLOAD_STATUS_LED] = CRGB(0, 0, 0);
-    leds[INTERNET_STATUS_LED] = CRGB(0, 0, 0);
-    leds[TIME_STATUS_LED] = CRGB(0, 0, 0);
-    FastLED.show();
-  }
+  //  if (wifiConnectStatus == 2) {
+  //
+  //    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 255, 255);
+  //    FastLED.show();
+  //  }
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -284,7 +291,7 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
 
   if (getLocalTime(&timeinfo)) {
 
-    leds[TIME_STATUS_LED] = CRGB(255, 255, 255);
+    leds[TIME_STATUS_LED] = CRGB(255, 0, 255);
 
     clearLCD(ltx, lty - 18, 128, 18);
 
@@ -350,13 +357,13 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
     u8g2.drawStr(ltx, lty, timeStringBuff);
 
     u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(ltx + 59, lty - 9, ampmStringBuff);
+    u8g2.drawStr(ltx + 59, lty, ampmStringBuff);
     u8g2.setFont(u8g2_font_t0_11b_tr);
     u8g2.drawStr(ltx + 78, lty, mDayStringBuff);
     u8g2.drawStr(ltx + 94, lty, monthStringBuff);
     u8g2.drawStr(ltx + 110, lty, yearStringBuff);
 
-    //    u8g2.drawStr(ltx + 59, lty - 9, secStringBuff);
+    u8g2.drawStr(ltx + 59, lty - 9, secStringBuff);
     u8g2.drawStr(ltx + 78, lty - 9, wDayStringBuff);
     u8g2.drawStr(ltx + 100, lty - 9, mNameStringBuff);
 
@@ -371,14 +378,14 @@ void printSSID(uint8_t ssidx, uint8_t ssidy) {
 
   if (strlen(ssid.c_str()) > 7) {
     String shortSSID = ssid.substring(0, 7);
-    String wifiName = "SSID-" + shortSSID + " ...";
+    String wifiName = "SSID " + shortSSID + " ...";
     clearLCD(ssidx, ssidy - 10, 99, 8);
 
     u8g2.setFont(u8g2_font_helvR08_tr);
     u8g2.drawStr(ssidx, ssidy, wifiName.c_str()); //c_str() function used for convert string to const char *
     u8g2.sendBuffer();
   } else {
-    String wifiName = "SSID-" + ssid;
+    String wifiName = "SSID " + ssid;
     clearLCD(ssidx, ssidy - 10, 99, 8);
 
     u8g2.setFont(u8g2_font_helvR08_tr);
@@ -414,15 +421,13 @@ void internetStatus(uint8_t iSx, uint8_t iSy, uint8_t statusValue) {
     tostring(avg_time_str, pingTime);
     strcat(avg_time_str, unit_str);
 
-    clearLCD(iSx, iSy - 9, 77, 9);
-
-    u8g2.setFont(u8g2_font_helvR08_tr);
-    u8g2.drawStr(iSx, iSy, avg_time_str);
-
-    clearLCD(iSx + 78, iSy - 9, 45, 9);
+    clearLCD(iSx, iSy - 9, 80, 9);
 
     u8g2.setFont(u8g2_font_t0_11b_tr);
-    u8g2.drawStr(iSx + 78, iSy, "Online");
+    u8g2.drawStr(iSx, iSy, avg_time_str);
+
+    clearLCD(iSx + 82, iSy - 9, 45, 9);
+    u8g2.drawStr(iSx + 82, iSy, "Online");
     u8g2.sendBuffer();
   }
   if (statusValue == 2)
@@ -435,53 +440,75 @@ void internetStatus(uint8_t iSx, uint8_t iSy, uint8_t statusValue) {
   }
 }
 
-/////////////////////////////////////////////////////////
-void pingTest() {
-  iconUpDown(107, 63, 1);
-  if (Ping.ping(remote_ip)) { //remote_ip, remote_host
-    pingTime = Ping.averageTime();
-    pingStatus = 1;
-    iconUpDown(107, 63, 2);
-  }
-  else {
-    pingStatus = 2;
-    iconUpDown(107, 63, 2);
-  }
-}
+
 ///////////////////////////////////////////////////////////
+
 void iconUpDown(uint8_t ix, uint8_t iy, uint8_t udFlag) {
 
   if (udFlag == 1) {
     uploadDownloadLed(udFlag);
-    clearLCD(ix, iy - 10, 20, 10);
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(ix, iy, "U");
-    u8g2.sendBuffer();
-//    u8g2.drawXBM(ix, iy, 5, 8, upload_logo_bits);
-
+    clearLCD(ix, iy, 12, 8);
+    u8g2.drawXBM(ix, iy, 5, 8, upload_logo_bits);
   }
   if (udFlag == 2) {
     uploadDownloadLed(udFlag);
-    clearLCD(ix, iy - 10, 20, 10);
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(ix + 7, iy, "D");
-    u8g2.sendBuffer();
-//    u8g2.drawXBM(ix + 7, iy, 5, 8, download_logo_bits);
+    clearLCD(ix, iy, 12, 8);
+    u8g2.drawXBM(ix + 7, iy, 5, 8, download_logo_bits);
   }
 
 }
+
 //////////////////////////////////////////////////////////////
+
 void uploadDownloadLed(uint8_t udLed) {
   if (udLed == 1) {
-    leds[UPLOAD_DOWNLOAD_STATUS_LED] = CRGB(0, 204, 255);
+    leds[UPLOAD_DOWNLOAD_STATUS_LED] = CRGB(0, 0, 255);
     FastLED.show();
   }
   if (udLed == 2) {
-    leds[UPLOAD_DOWNLOAD_STATUS_LED] = CRGB(0, 0, 0);
+    leds[UPLOAD_DOWNLOAD_STATUS_LED] = CRGB(0, 204, 255);
     FastLED.show();
   }
 }
+
+/////////////////////////////////////////////////////////
+
+void pingTest() {
+
+  iconUpDown(107, 55, 1);
+
+  if (Ping.ping(remote_ip)) { //remote_ip, remote_host
+
+    if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+      sharedVarForTime = Ping.averageTime();
+      sharedVarForStatus = 1;
+      xSemaphoreGive(variableMutex);
+    }
+
+    iconUpDown(107, 55, 2);
+  }
+  else {
+    if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+      sharedVarForStatus = 2;
+      xSemaphoreGive(variableMutex);
+    }
+    iconUpDown(107, 55, 2);
+  }
+
+  delay(3000);
+}
+
+/////////////////////////////////////////////////////////
+void updatePingValue() {
+  if (xSemaphoreTake(variableMutex, portMAX_DELAY)) {
+    pingTime = sharedVarForTime;
+    pingStatus = sharedVarForStatus;
+    xSemaphoreGive(variableMutex);
+  }
+}
+
 ////////////////////////////////////////////////////////////
+
 void welcomeMsg() {
 
   u8g2.clearBuffer();
@@ -566,23 +593,80 @@ void printTimer(int netStatus, uint8_t ptx, uint8_t pty) {
     }
   }
 }
+/////////////////////////////////////////////////////////////
+void loading() {
+
+  static uint16_t sPseudotime = 0;
+  static uint16_t sLastMillis = 0;
+  static uint16_t sHue16 = 0;
+
+  uint8_t sat8 = beatsin88( 87, 220, 250);
+  uint8_t brightdepth = beatsin88( 341, 96, 224);
+  uint16_t brightnessthetainc16 = beatsin88( 203, (25 * 256), (40 * 256));
+  uint8_t msmultiplier = beatsin88(147, 23, 60);
+
+  uint16_t hue16 = sHue16;//gHue * 256;
+  uint16_t hueinc16 = beatsin88(113, 1, 3000);
+
+  uint16_t ms = millis();
+  uint16_t deltams = ms - sLastMillis ;
+  sLastMillis  = ms;
+  sPseudotime += deltams * msmultiplier;
+  sHue16 += deltams * beatsin88( 400, 5, 9);
+  uint16_t brightnesstheta16 = sPseudotime;
+
+  for ( uint16_t i = 0 ; i < NUM_LEDS; i++) {
+    hue16 += hueinc16;
+    uint8_t hue8 = hue16 / 256;
+
+    brightnesstheta16  += brightnessthetainc16;
+    uint16_t b16 = sin16( brightnesstheta16  ) + 32768;
+
+    uint16_t bri16 = (uint32_t)((uint32_t)b16 * (uint32_t)b16) / 65536;
+    uint8_t bri8 = (uint32_t)(((uint32_t)bri16) * brightdepth) / 65536;
+    bri8 += (255 - brightdepth);
+
+    CRGB newcolor = CHSV( hue8, sat8, bri8);
+
+    uint16_t pixelnumber = i;
+    pixelnumber = (NUM_LEDS - 1) - pixelnumber;
+
+    nblend( leds[pixelnumber], newcolor, 64);
+  }
+}
+
+///////////////////////////////////////////////////////////////
+
+void loop2(void * parameter) {
+  for (;;) {
+    if (WiFi.status() == WL_CONNECTED) {
+      pingTest();
+    }
+
+    while (WiFi.status() != WL_CONNECTED) {
+      loading();
+      FastLED.show();
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+
+}
+
 //////////////////////////////////////////////////////////////////
 void loop() {
 
   if (WiFi.status() == WL_CONNECTED) {
-    pingTest();
+    wifiConnectStatusLed(1);
+    updatePingValue();
     printLocalTime(0, 18);
     remoteHost(0, 29);
-    internetStatus(0, 42, pingStatus);
-    printTimer(pingStatus, 82, 42);
     printSSID(0, 53);
     wifiSignalQuality(100, 53);
     ipCheck(0, 63);
-
-    wifiConnectStatusLed(1);
+    internetStatus(0, 42, pingStatus);
     noInternetBeep(pingStatus);
-
-    delay(5000);
+    printTimer(pingStatus, 82, 42);
   }
   else {
     wifiConnectStatusLed(2);
