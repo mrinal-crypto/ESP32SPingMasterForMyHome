@@ -252,7 +252,7 @@ void connectWiFi(uint8_t cwx, uint8_t cwy) {
 void wifiConnectStatusLed(uint8_t wifiConnectStatus) {
 
   if (wifiConnectStatus == 1) {
-    leds[WIFI_CONNECT_STATUS_LED] = CRGB(255, 255, 255);
+    leds[WIFI_CONNECT_STATUS_LED] = CRGB(0, 255, 0);
     FastLED.show();
   }
   if (wifiConnectStatus == 2) {
@@ -284,7 +284,7 @@ void printLocalTime(uint8_t ltx, uint8_t lty) {
 
   if (getLocalTime(&timeinfo)) {
 
-    leds[TIME_STATUS_LED] = CRGB(255, 255, 255);
+    leds[TIME_STATUS_LED] = CRGB(0, 255, 0);
 
     clearLCD(ltx, lty - 18, 128, 18);
 
